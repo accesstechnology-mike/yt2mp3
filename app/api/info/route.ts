@@ -16,6 +16,33 @@ function isValidYouTubeUrl(url: string): boolean {
   return patterns.some(pattern => pattern.test(url.trim()))
 }
 
+// Clean URL to remove playlist params and get just the video
+function cleanYouTubeUrl(url: string): string {
+  try {
+    const urlObj = new URL(url.includes('://') ? url : `https://${url}`)
+    const videoId = urlObj.searchParams.get('v')
+    
+    if (videoId) {
+      // Return clean URL with just the video ID
+      return `https://www.youtube.com/watch?v=${videoId}`
+    }
+    
+    // Handle youtu.be and shorts - strip query params
+    if (urlObj.hostname === 'youtu.be') {
+      return `https://youtu.be${urlObj.pathname}`
+    }
+    
+    if (urlObj.pathname.includes('/shorts/')) {
+      const shortId = urlObj.pathname.split('/shorts/')[1]?.split('/')[0]
+      return `https://www.youtube.com/shorts/${shortId}`
+    }
+    
+    return url
+  } catch {
+    return url
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { url } = await request.json()
@@ -28,8 +55,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid YouTube URL' }, { status: 400 })
     }
 
+    // Clean URL to remove playlist params
+    const cleanUrl = cleanYouTubeUrl(url)
+
+    // Get video info using yt-dlp (--no-playlist ensures single video only)
     const { stdout } = await execAsync(
-      `${YTDLP_PATH} --extractor-args "youtube:player_client=default" --dump-json "${url}"`,
+      `${YTDLP_PATH} --no-playlist --extractor-args "youtube:player_client=default" --dump-json "${cleanUrl}"`,
       { timeout: 30000 }
     )
 
