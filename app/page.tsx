@@ -2,13 +2,14 @@
 
 import { useState, useCallback } from 'react'
 
-type Status = 'idle' | 'loading' | 'success' | 'error'
+type Status = 'idle' | 'fetching' | 'downloading' | 'success' | 'error'
 
 export default function Home() {
   const [url, setUrl] = useState('')
   const [status, setStatus] = useState<Status>('idle')
   const [error, setError] = useState('')
   const [videoTitle, setVideoTitle] = useState('')
+  const [statusMessage, setStatusMessage] = useState('')
 
   const isValidYouTubeUrl = (url: string): boolean => {
     const patterns = [
@@ -33,11 +34,13 @@ export default function Home() {
       return
     }
 
-    setStatus('loading')
+    setStatus('fetching')
+    setStatusMessage('Connecting to YouTube...')
     setError('')
     setVideoTitle('')
 
     try {
+      setStatusMessage('Fetching video info...')
       const infoResponse = await fetch('/api/info', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -51,6 +54,10 @@ export default function Home() {
       }
 
       setVideoTitle(infoData.title)
+      setStatus('downloading')
+      setStatusMessage(`Preparing download...`)
+
+      await new Promise(resolve => setTimeout(resolve, 300))
 
       const downloadUrl = `/api/download?url=${encodeURIComponent(url.trim())}`
       
@@ -61,12 +68,14 @@ export default function Home() {
       link.click()
       document.body.removeChild(link)
 
+      setStatusMessage('Download started! Check your browser downloads.')
       setStatus('success')
       
       setTimeout(() => {
         setStatus('idle')
         setUrl('')
         setVideoTitle('')
+        setStatusMessage('')
       }, 5000)
 
     } catch (err) {
@@ -87,10 +96,12 @@ export default function Home() {
   }, [])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && status !== 'loading') {
+    if (e.key === 'Enter' && status !== 'fetching' && status !== 'downloading') {
       handleConvert()
     }
   }, [handleConvert, status])
+
+  const isLoading = status === 'fetching' || status === 'downloading'
 
   return (
     <main className="relative z-10 min-h-screen flex flex-col items-center justify-center px-4 py-12">
@@ -124,12 +135,12 @@ export default function Home() {
                 onKeyDown={handleKeyDown}
                 placeholder="https://youtube.com/watch?v=..."
                 className={`input-field pr-24 ${status === 'error' ? 'animate-shake border-red-500' : ''}`}
-                disabled={status === 'loading'}
+                disabled={isLoading}
               />
               <button
                 onClick={handlePaste}
                 className="absolute right-3 top-1/2 -translate-y-1/2 px-4 py-2 text-sm text-[var(--text-secondary)] hover:text-white transition-colors rounded-lg hover:bg-white/5"
-                disabled={status === 'loading'}
+                disabled={isLoading}
               >
                 Paste
               </button>
@@ -147,13 +158,18 @@ export default function Home() {
 
             <button
               onClick={handleConvert}
-              disabled={status === 'loading'}
+              disabled={isLoading}
               className="btn-primary w-full flex items-center justify-center gap-3"
             >
-              {status === 'loading' ? (
+              {status === 'fetching' ? (
                 <>
                   <span className="loading-ring" />
-                  Converting...
+                  Finding video...
+                </>
+              ) : status === 'downloading' ? (
+                <>
+                  <span className="loading-ring" />
+                  Preparing download...
                 </>
               ) : status === 'success' ? (
                 <>
@@ -174,13 +190,18 @@ export default function Home() {
             </button>
           </div>
 
-          {status === 'loading' && (
+          {isLoading && (
             <div className="mt-6 space-y-3">
               <div className="progress-bar">
                 <div className="progress-fill" />
               </div>
+              {videoTitle && (
+                <p className="text-center text-sm text-white font-medium truncate px-2">
+                  🎵 {videoTitle}
+                </p>
+              )}
               <p className="text-center text-sm text-[var(--text-secondary)]">
-                Extracting highest quality audio...
+                {statusMessage || 'Processing...'}
               </p>
             </div>
           )}
